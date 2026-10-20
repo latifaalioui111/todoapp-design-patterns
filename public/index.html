@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TodoApp</title>
+  <style>
+    :root {
+      --page-bg: #ffffff;
+      --card-bg: #eef2ff;
+      --card-border: #c7d2fe;
+      --field-bg: #f8f9ff;
+      --primary: #4f46e5;
+      --title: #7c6fe6;
+      --text: #4b5563;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--page-bg);
+      min-height: 100vh;
+      padding: 40px 16px;
+      color: var(--text);
+    }
+    .container { max-width: 720px; margin: 0 auto; }
+    h1 {
+      color: var(--title);
+      font-size: 3.4rem;
+      text-align: center;
+      margin-bottom: 8px;
+      letter-spacing: -1px;
+    }
+    .subtitle { color: var(--muted); text-align: center; margin-bottom: 32px; }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .card h2 { font-size: 1.1rem; margin-bottom: 16px; color: var(--title); }
+    .form { display: flex; flex-direction: column; gap: 12px; }
+    .form input, .form textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid var(--card-border);
+      background: var(--field-bg);
+      border-radius: 10px;
+      font-size: 1rem;
+      font-family: inherit;
+      outline: none;
+    }
+    .form textarea { resize: vertical; min-height: 80px; }
+    .form input:focus, .form textarea:focus { border-color: var(--primary); }
+    button {
+      border: none; border-radius: 10px;
+      padding: 12px 18px;
+      font-size: .95rem; font-weight: 600;
+      cursor: pointer; transition: transform .1s, opacity .2s;
+    }
+    button:hover { opacity: .9; transform: translateY(-1px); }
+    .btn-add { background: var(--primary); color: white; align-self: flex-start; }
+    .task {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--field-bg);
+      border: 2px solid var(--card-border);
+      border-radius: 12px;
+    }
+    .task:last-child { margin-bottom: 0; }
+    .task-info { flex: 1; min-width: 200px; }
+    .task-info strong { display: block; font-size: 1.1rem; color: var(--title); }
+    .assignee { color: var(--muted); font-size: .9rem; }
+    .description {
+      margin-top: 8px;
+      font-size: .95rem;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+    .actions { display: flex; gap: 8px; }
+    .status { color: white; padding: 8px 14px; font-size: .85rem; }
+    .status.todo { background: #9ca3af; }
+    .status.progress { background: #f59e0b; }
+    .status.done { background: #10b981; }
+    .btn-delete { background: #fee2e2; color: #dc2626; padding: 8px 14px; font-size: .85rem; }
+    .empty { text-align: center; color: var(--muted); padding: 20px 0; }
+    .error { color: #dc2626; margin-top: 10px; font-size: .9rem; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>TodoApp</h1>
+    <p class="subtitle">Gérez les tâches de votre équipe</p>
+
+    <div class="card">
+      <h2>Nouvelle tâche</h2>
+      <div class="form">
+        <input id="assignee" placeholder="Personne concernée (ex : Sara)" autocomplete="off">
+        <textarea id="description" placeholder="Que faut-il faire ? (ex : préparer la présentation de lundi)"></textarea>
+        <button class="btn-add" onclick="addTask()">+ Créer la tâche</button>
+      </div>
+      <p class="error" id="error"></p>
+    </div>
+
+    <div class="card">
+      <h2>Mes tâches</h2>
+      <div id="list"></div>
+    </div>
+  </div>
+
+  <script>
+    const STATUS_CLASS = { 'À faire': 'todo', 'En cours': 'progress', 'Terminé': 'done' };
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    async function load() {
+      const tasks = await (await fetch('/tasks')).json();
+      const list = document.getElementById('list');
+      if (tasks.length === 0) {
+        list.innerHTML = '<p class="empty">Aucune tâche pour le moment</p>';
+        return;
+      }
+      list.innerHTML = tasks.map(t => `
+        <div class="task">
+          <div class="task-info">
+            <strong>${escapeHtml(t.name)}</strong>
+            <span class="assignee">👤 ${escapeHtml(t.assignee)}</span>
+            ${t.description ? `<p class="description">${escapeHtml(t.description)}</p>` : ''}
+          </div>
+          <div class="actions">
+            <button class="status ${STATUS_CLASS[t.status]}" onclick="changeStatus(${t.id})">${t.status}</button>
+            <button class="btn-delete" onclick="removeTask(${t.id})">Supprimer</button>
+          </div>
+        </div>`).join('');
+    }
+
+    async function addTask() {
+      const assignee = document.getElementById('assignee');
+      const description = document.getElementById('description');
+      const error = document.getElementById('error');
+      const res = await fetch('/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignee: assignee.value, description: description.value }),
+      });
+      if (!res.ok) {
+        error.textContent = (await res.json()).error;
+        return;
+      }
+      error.textContent = '';
+      assignee.value = '';
+      description.value = '';
+      load();
+    }
+
+    async function changeStatus(id) {
+      await fetch(`/tasks/${id}/status`, { method: 'PATCH' });
+      load();
+    }
+
+    async function removeTask(id) {
+      await fetch(`/tasks/${id}`, { method: 'DELETE' });
+      load();
+    }
+
+    document.getElementById('assignee').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addTask();
+    });
+
+    load();
+  </script>
+</body>
+</html>
+
